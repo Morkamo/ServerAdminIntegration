@@ -46,26 +46,29 @@ public static class Program
                 TokenType = TokenType.Bot,
                 Intents = DiscordIntents.Guilds,
                 MinimumLogLevel = Microsoft.Extensions.Logging.LogLevel.Information,
+                HttpTimeout = TimeSpan.FromSeconds(15),
             });
             var slash = client.UseSlashCommands();
             slash.RegisterCommands<PingCommands>(Config.GuildId);
             slash.RegisterCommands<PermissionsControlCommand>(Config.GuildId);
-            client.ComponentInteractionCreated += PermissionsUi.HandleAsync;
+            slash.RegisterCommands<ModerationCommands>(Config.GuildId);
+            slash.RegisterCommands<PlayersCommand>(Config.GuildId);
+            client.ComponentInteractionCreated += (sender, e) => DispatchAsync(() => PermissionsUi.HandleAsync(sender, e));
+            client.ComponentInteractionCreated += (sender, e) => DispatchAsync(() => PlayersUi.HandleAsync(sender, e));
+            client.ModalSubmitted += (sender, e) => DispatchAsync(() => PlayersUi.ModalAsync(sender, e));
             slash.SlashCommandErrored += async (_, e) =>
             {
-                Console.Error.WriteLine("Slash command failed: " + e.Exception.GetType().Name);
+                Console.Error.WriteLine($"/{e.Context.CommandName}: slash handler failed ({e.Exception.GetType().Name}).");
                 try
                 {
-                    await e.Context.FollowUpAsync(new DSharpPlus.Entities.DiscordFollowupMessageBuilder()
-                        .WithContent("Не удалось обработать команду. Попробуйте позже.").AsEphemeral()
-                        .AddMentions(DSharpPlus.Entities.Mentions.None));
+                    await Panel.RejectAsync(e.Context.Interaction, "Не удалось обработать команду. Попробуйте позже.");
                 }
                 catch (Exception exception) { Console.Error.WriteLine("Discord response failed: " + exception.GetType().Name); }
             };
             await client.ConnectAsync();
             try
             {
-                Console.WriteLine("ServerAdminBot запущен.");
+                Console.WriteLine($"ServerAdminBot {typeof(Program).Assembly.GetName().Version} запущен.");
                 await Task.Delay(Timeout.Infinite, stop.Token);
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
@@ -85,5 +88,16 @@ public static class Program
         {
             Console.CancelKeyPress -= cancel;
         }
+    }
+
+    internal static Task DispatchAsync(Func<Task> handler)
+    {
+        _ = Task.Run(async () =>
+        {
+            try { await handler(); }
+            catch (OperationCanceledException) when (StopToken.IsCancellationRequested) { }
+            catch (Exception exception) { Console.Error.WriteLine("Discord interaction failed: " + exception.GetType().Name); }
+        });
+        return Task.CompletedTask;
     }
 }

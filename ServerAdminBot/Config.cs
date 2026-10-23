@@ -10,6 +10,11 @@ public sealed class Config
     public ulong GuildId { get; set; }
     public DatabaseConfig Database { get; set; } = new();
     public Dictionary<string, ServerConfig> Servers { get; set; } = new() { ["Classic"] = new() };
+    public Dictionary<string, ulong> CommandLogs { get; set; } = new()
+    {
+        ["ping"] = 0, ["pingserver"] = 0, ["players"] = 0, ["ban"] = 0,
+        ["oban"] = 0, ["kick"] = 0, ["permissionscontrol"] = 0,
+    };
 
     public static async Task<Config> LoadAsync(string path, bool requireDiscord, CancellationToken token)
     {
@@ -58,6 +63,9 @@ public sealed class Config
                 server.Validate();
         }
         config.Servers = servers;
+        if (config.CommandLogs == null)
+            throw new InvalidOperationException("command_logs должен содержать названия команд и ID каналов; 0 отключает лог.");
+        config.CommandLogs = new Dictionary<string, ulong>(config.CommandLogs, StringComparer.OrdinalIgnoreCase);
         return config;
     }
 

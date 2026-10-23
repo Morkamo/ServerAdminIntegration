@@ -2,8 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Net;
 using System.Text;
+using Utf8Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ServerAdminIntegration.Configs;
@@ -89,19 +91,57 @@ public sealed class ApiServer
                         context.Response.Headers["Allow"] = "POST";
                         text = "Method not allowed.";
                     }
-                    else if (request.HasEntityBody)
-                    {
-                        status = 400;
-                        text = "This command does not accept a request body.";
-                    }
-                    else if (url == null || url.AbsolutePath != ApiProtocol.CommandPath + "ping" || url.Query.Length != 0)
+                    else if (url == null || url.Query.Length != 0 || !url.AbsolutePath.StartsWith(ApiProtocol.CommandPath, StringComparison.Ordinal) ||
+                        Array.IndexOf(new[] { "ping", "players", "ban", "oban", "kick" }, url.AbsolutePath.Substring(ApiProtocol.CommandPath.Length)) < 0)
                     {
                         status = 404;
                         text = "Unknown command.";
                     }
+                    else if ((url.AbsolutePath.EndsWith("/ping", StringComparison.Ordinal) || url.AbsolutePath.EndsWith("/players", StringComparison.Ordinal)) && request.HasEntityBody)
+                    {
+                        status = 400;
+                        text = "This command does not accept a request body.";
+                    }
                     else
                     {
-                        text = await _commands.ExecuteAsync("ping", timeout.Token).ConfigureAwait(false);
+                        var command = url.AbsolutePath.Substring(ApiProtocol.CommandPath.Length);
+                        var parameters = new ApiRequest();
+                        if (command != "ping" && command != "players")
+                        {
+                            if (!request.HasEntityBody || request.ContentLength64 > ApiProtocol.MaximumRequestBytes)
+                            {
+                                await ReplyAsync(context.Response, 400, "Invalid request body.", timeout.Token).ConfigureAwait(false);
+                                return;
+                            }
+                            using (var data = new MemoryStream())
+                            {
+                                var buffer = new byte[1024];
+                                int read;
+                                while ((read = await request.InputStream.ReadAsync(buffer, 0, buffer.Length, timeout.Token).ConfigureAwait(false)) != 0)
+                                {
+                                    if (data.Length + read > ApiProtocol.MaximumRequestBytes)
+                                    {
+                                        await ReplyAsync(context.Response, 413, "Request too large.", timeout.Token).ConfigureAwait(false);
+                                        return;
+                                    }
+                                    data.Write(buffer, 0, read);
+                                }
+                                try { parameters = ApiJson.ReadRequest(data.ToArray()); }
+                                catch (JsonParsingException)
+                                {
+                                    await ReplyAsync(context.Response, 400, "Invalid JSON.", timeout.Token).ConfigureAwait(false);
+                                    return;
+                                }
+                            }
+                        }
+                        var result = await _commands.ExecuteAsync(command, parameters, timeout.Token).ConfigureAwait(false);
+                        if (command == "ping")
+                            text = result.Message;
+                        else
+                        {
+                            text = ApiJson.WriteResult(result);
+                            context.Response.ContentType = "application/json; charset=utf-8";
+                        }
                     }
                     await ReplyAsync(context.Response, status, text, timeout.Token).ConfigureAwait(false);
                 }
@@ -110,7 +150,7 @@ public sealed class ApiServer
                 {
                     if (!timeout.IsCancellationRequested)
                     {
-                        _log("API request failed: " + exception.GetType().Name);
+                        _log("API request failed: " + exception);
                         try
                         {
                             await ReplyAsync(context.Response, 500, "Command failed.", timeout.Token).ConfigureAwait(false);
@@ -141,7 +181,8 @@ public sealed class ApiServer
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         response.StatusCode = status;
-        response.ContentType = "text/plain; charset=utf-8";
+        if (string.IsNullOrEmpty(response.ContentType))
+            response.ContentType = "text/plain; charset=utf-8";
         response.ContentLength64 = bytes.Length;
         await response.OutputStream.WriteAsync(bytes, 0, bytes.Length, token).ConfigureAwait(false);
         response.Close();

@@ -7,7 +7,8 @@ namespace ServerAdminBot.Components;
 
 public static class PermissionsUi
 {
-    private static readonly string[] Commands = ["ping", "pingserver"];
+    private static readonly string[] Commands = ["ping", "pingserver", "ban", "oban", "players", "players.manage"];
+    private static string Title(string command) => command == "players.manage" ? "/players · Управление" : "/" + command;
     private static readonly ConcurrentDictionary<string, Session> Sessions = new();
 
     private sealed class Session
@@ -41,7 +42,9 @@ public static class PermissionsUi
         Sessions[key] = session;
         try
         {
-            await Panel.SendAsync(interaction, await BuildAsync(key, session, member.Guild), Program.StopToken);
+            var payload = await BuildAsync(key, session, member.Guild);
+            CommandLog.Write("permissionscontrol", member.Id, payload);
+            await Panel.SendAsync(interaction, payload, Program.StopToken);
         }
         catch
         {
@@ -59,11 +62,10 @@ public static class PermissionsUi
         var roleText = Ui.Truncate(string.Join(", ", names), 950);
         var components = new List<object>
         {
-            Panel.Text("### Настройка прав · /" + session.Command),
-            Panel.Text("Изменения сохраняются сразу. Администраторы Discord имеют полный доступ всегда."),
+            Panel.Text("### Настройка прав · " + Title(session.Command)),
             Panel.Text("**Общий доступ:** " + (settings.Everyone ? "Включён · @everyone" : "Выключен") +
                 "\n**Роли с доступом:** " + (roleText.Length == 0 ? "Нет" : roleText)),
-            Panel.Row(Panel.Select(prefix + "command", "Выберите команду", Commands.Select(x => ("/" + x, x, x == session.Command)))),
+            Panel.Row(Panel.Select(prefix + "command", "Выберите команду или блок", Commands.Select(x => (Title(x), x, x == session.Command)))),
         };
         if (page.Length > 0)
             components.Add(Panel.Row(Panel.Select(prefix + "roles", "Роли с доступом", page.Select(id => (
@@ -93,7 +95,7 @@ public static class PermissionsUi
             await RejectAsync(e, "Это панель другого пользователя.");
             return;
         }
-        await e.Interaction.CreateResponseAsync(InteractionResponseType.DeferredMessageUpdate);
+        await Panel.DeferAsync(e.Interaction, update: true);
         await session.Gate.WaitAsync(Program.StopToken);
         try
         {
@@ -139,15 +141,19 @@ public static class PermissionsUi
                 default:
                     throw new UserError("Неизвестное действие.");
             }
-            await Panel.SendAsync(e.Interaction, await BuildAsync(parts[1], session, e.Guild), Program.StopToken);
+            var payload = await BuildAsync(parts[1], session, e.Guild);
+            if (parts[3] is "roles" or "everyone") CommandLog.Write("permissionscontrol", e.User.Id, payload);
+            await Panel.SendAsync(e.Interaction, payload, Program.StopToken);
         }
         catch (OperationCanceledException) when (Program.StopToken.IsCancellationRequested) { }
         catch (Exception exception)
         {
             Console.Error.WriteLine("Permissions: " + exception.GetType().Name);
             Sessions.TryRemove(parts[1], out _);
-            await Panel.SendAsync(e.Interaction, Panel.Build([Panel.Text(exception is UserError
-                ? exception.Message : "Не удалось обновить права. Откройте панель заново.")], 0xED4245), Program.StopToken);
+            var payload = Panel.Build([Panel.Text(exception is UserError
+                ? exception.Message : "Не удалось обновить права. Откройте панель заново.")], 0xED4245);
+            CommandLog.Write("permissionscontrol", e.User.Id, payload);
+            await Panel.SendAsync(e.Interaction, payload, Program.StopToken);
         }
         finally
         {
@@ -155,7 +161,5 @@ public static class PermissionsUi
         }
     }
 
-    private static Task RejectAsync(ComponentInteractionCreateEventArgs e, string text) => e.Interaction.CreateResponseAsync(
-        InteractionResponseType.ChannelMessageWithSource,
-        new DiscordInteractionResponseBuilder().WithContent(text).AsEphemeral().AddMentions(Mentions.None));
+    private static Task RejectAsync(ComponentInteractionCreateEventArgs e, string text) => Panel.RejectAsync(e.Interaction, text);
 }

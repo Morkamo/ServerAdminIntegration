@@ -16,15 +16,7 @@ public sealed class PingCommands : ApplicationCommandModule
     public Task PingServer(InteractionContext context,
         [Option("server", "Игровой сервер")] [Autocomplete(typeof(ServerAutocomplete))] string? server = null) => Ui.RunAsync(context, async () =>
     {
-        if (string.IsNullOrWhiteSpace(server))
-        {
-            if (Program.Config.Servers.Count != 1)
-                throw new UserError("Выберите игровой сервер в параметре server.");
-            server = Program.Config.Servers.Keys.Single();
-        }
-        if (!Program.Config.Servers.TryGetValue(server, out var connection))
-            throw new UserError("Неизвестный игровой сервер. Выберите сервер из списка.");
-        var result = await Program.ServerApi.ExecuteAsync(connection, "ping", Program.StopToken);
+        var result = await Program.ServerApi.ExecuteAsync(Ui.Server(server).Connection, "ping", Program.StopToken);
         await Ui.ReplyTextAsync(context, result);
     });
 }

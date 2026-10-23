@@ -17,12 +17,13 @@ public sealed class Core : Plugin
     public override string Name { get; } = nameof(ServerAdminIntegration);
     public override string Description { get; } = "Asynchronous API for the server administration Discord bot.";
     public override string Author { get; } = "Morkamo";
-    public override Version Version { get; } = new Version(1, 0, 0);
+    public override Version Version { get; } = new Version(1, 1, 2);
     public override Version RequiredApiVersion { get; } = new Version(LabApiProperties.CompiledVersion);
 
     public ApiConfig ApiConfig { get; private set; }
     public ApiServer ApiServer { get; private set; }
     public CommandHandler CommandHandler { get; private set; }
+    private GameActions _actions;
     private CancellationTokenSource _stop;
 
     public override void Enable()
@@ -32,7 +33,8 @@ public sealed class Core : Plugin
         if (ApiConfig == null || !ApiConfig.IsEnabled)
             return;
 
-        CommandHandler = new CommandHandler();
+        var actions = _actions = new GameActions();
+        CommandHandler = new CommandHandler(actions.ExecuteAsync);
         ApiServer = new ApiServer(ApiConfig, CommandHandler, message => Logger.Info(message));
         var server = ApiServer;
         var stop = _stop = new CancellationTokenSource();
@@ -56,6 +58,8 @@ public sealed class Core : Plugin
 
     public override void Disable()
     {
+        _actions?.Stop();
+        _actions = null;
         var stop = Interlocked.Exchange(ref _stop, null);
         if (stop != null)
         {

@@ -1,6 +1,15 @@
 {
   "token": "",
   "guild_id": 0,
+  "command_logs": {
+    "ping": 0,
+    "pingserver": 0,
+    "players": 0,
+    "ban": 0,
+    "oban": 0,
+    "kick": 0,
+    "permissionscontrol": 0
+  },
   "database": {
     "host": "127.0.0.1",
     "port": 5432,

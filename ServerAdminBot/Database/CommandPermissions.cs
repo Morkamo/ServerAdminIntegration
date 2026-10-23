@@ -10,6 +10,7 @@ public sealed record PermissionSettings(bool Everyone, HashSet<ulong> Roles)
 
 public sealed class CommandPermissions(NpgsqlDataSource source)
 {
+    public static bool IsOpen(string command) => command is "ping" or "pingserver" or "players";
     public async Task InitializeAsync(CancellationToken token)
     {
         await using var stream = typeof(CommandPermissions).Assembly.GetManifestResourceStream("ServerAdminBot.Database.Schema.sql")!;
@@ -26,14 +27,15 @@ public sealed class CommandPermissions(NpgsqlDataSource source)
         await using var reader = await query.ExecuteReaderAsync(token);
         return await reader.ReadAsync(token)
             ? new PermissionSettings(reader.GetBoolean(0), reader.GetFieldValue<long[]>(1).Select(x => checked((ulong)x)).ToHashSet())
-            : new PermissionSettings(true, []);
+            : new PermissionSettings(IsOpen(command), []);
     }
 
     private async Task EnsureAsync(ulong guild, string command, CancellationToken token)
     {
-        await using var query = source.CreateCommand("INSERT INTO bot.command_permissions(guild_id, command) VALUES ($1, $2) ON CONFLICT DO NOTHING");
+        await using var query = source.CreateCommand("INSERT INTO bot.command_permissions(guild_id, command, everyone) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING");
         query.Parameters.AddWithValue(checked((long)guild));
         query.Parameters.AddWithValue(command);
+        query.Parameters.AddWithValue(IsOpen(command));
         await query.ExecuteNonQueryAsync(token);
     }
 

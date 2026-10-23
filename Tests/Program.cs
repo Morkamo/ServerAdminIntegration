@@ -14,7 +14,7 @@ using ServerAdminIntegration.Shared;
 
 namespace IntegrationTests;
 
-public static class Program
+public static partial class Program
 {
     private const string Key = "integration-test-key-0123456789abcdef";
     private static int _checks;
@@ -25,6 +25,9 @@ public static class Program
         {
             await CheckConfigAsync();
             CheckPresentation();
+            await CheckModerationAsync();
+            await CheckModerationApiAsync();
+            await CheckDiscordAsync();
             await CheckApiAsync();
             await CheckTimeoutsAsync();
             if (args.Length != 0)
@@ -211,6 +214,7 @@ public static class Program
         {
             await ExpectAsync<InvalidOperationException>(() => Config.LoadAsync(path, false, default), "missing config creates template");
             var generated = await Config.LoadAsync(path, false, default);
+            Check(generated.CommandLogs.Count == 7 && generated.CommandLogs.Values.All(channel => channel == 0), "all command log destinations default to disabled");
             Check(generated.Servers.Single().Key == "Classic" && generated.Servers.Single().Value.Port == 7777, "default server configuration");
             var text = """
                 {"token":"test","guild_id":123,"servers":{
@@ -219,6 +223,10 @@ public static class Program
                 """.Replace("KEY", Key);
             await File.WriteAllTextAsync(path, text);
             var config = await Config.LoadAsync(path, true, default);
+            Check(config.CommandLogs.Values.All(channel => channel == 0), "existing configs without command_logs remain compatible");
+            await File.WriteAllTextAsync(path, text.Replace("\"guild_id\":123", "\"guild_id\":123,\"command_logs\":{\"BAN\":123456789012345678,\"ping\":0}"));
+            var logged = await Config.LoadAsync(path, true, default);
+            Check(logged.CommandLogs["ban"] == 123456789012345678 && logged.CommandLogs["ping"] == 0, "log destination keeps full snowflake id and supports case-insensitive command lookup");
             Check(config.Servers.ContainsKey("classic") && config.Servers.Count == 2, "arbitrary names and case-insensitive lookup");
             Check(config.Servers["Модовый"].Address.Host.Contains("::1"), "IPv6 URI");
             await File.WriteAllTextAsync(path, text.Replace("Модовый", "classic"));
@@ -258,6 +266,15 @@ public static class Program
         await permissions.InitializeAsync(default);
         const ulong guild = 123;
         Check((await permissions.GetAsync(guild, "ping")).Everyone, "new command open by default");
+        Check(!(await permissions.GetAsync(guild, "ban")).Everyone && !(await permissions.GetAsync(guild, "oban")).Everyone &&
+            !(await permissions.GetAsync(guild, "players.manage")).Everyone, "moderation closed without stored permissions");
+        Check((await permissions.GetAsync(guild, "players")).Everyone, "players open by default");
+        await permissions.UpdateRolesAsync(guild, "ban", [500], [500]);
+        Check(!(await permissions.GetAsync(guild, "ban")).Everyone &&
+            (await permissions.GetAsync(guild, "ban")).Allows(false, [500]), "adding moderator role does not enable everyone");
+        Check(!(await permissions.GetAsync(guild, "players.manage")).Allows(false, [500]), "ban permission does not grant players management");
+        await permissions.ToggleEveryoneAsync(guild, "oban");
+        Check((await permissions.GetAsync(guild, "oban")).Everyone, "closed command first toggle enables everyone");
         await permissions.ToggleEveryoneAsync(guild, "ping");
         Check(!(await permissions.GetAsync(guild, "ping")).Everyone, "everyone toggle persisted");
         await permissions.UpdateRolesAsync(guild, "ping", [1, 2, 3], [2]);
