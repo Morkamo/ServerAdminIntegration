@@ -1,0 +1,31 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServerAdminBot", "ServerAdminBot\ServerAdminBot.csproj", "{1882F873-CD05-4E0C-9BD9-35FE376C9BD0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServerAdminIntegration", "ServerAdminIntegration\ServerAdminIntegration.csproj", "{D5C29360-580E-4F49-9E1F-778EB1E5D129}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{EAC8F23B-D757-4939-BA8C-BB3FB19E7F2F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1882F873-CD05-4E0C-9BD9-35FE376C9BD0}.Debug|x64.ActiveCfg = Debug|x64
+		{1882F873-CD05-4E0C-9BD9-35FE376C9BD0}.Debug|x64.Build.0 = Debug|x64
+		{1882F873-CD05-4E0C-9BD9-35FE376C9BD0}.Release|x64.ActiveCfg = Release|x64
+		{1882F873-CD05-4E0C-9BD9-35FE376C9BD0}.Release|x64.Build.0 = Release|x64
+		{D5C29360-580E-4F49-9E1F-778EB1E5D129}.Debug|x64.ActiveCfg = Debug|x64
+		{D5C29360-580E-4F49-9E1F-778EB1E5D129}.Debug|x64.Build.0 = Debug|x64
+		{D5C29360-580E-4F49-9E1F-778EB1E5D129}.Release|x64.ActiveCfg = Release|x64
+		{D5C29360-580E-4F49-9E1F-778EB1E5D129}.Release|x64.Build.0 = Release|x64
+		{EAC8F23B-D757-4939-BA8C-BB3FB19E7F2F}.Debug|x64.ActiveCfg = Debug|x64
+		{EAC8F23B-D757-4939-BA8C-BB3FB19E7F2F}.Debug|x64.Build.0 = Debug|x64
+		{EAC8F23B-D757-4939-BA8C-BB3FB19E7F2F}.Release|x64.ActiveCfg = Release|x64
+		{EAC8F23B-D757-4939-BA8C-BB3FB19E7F2F}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

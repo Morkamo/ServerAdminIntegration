@@ -1,0 +1,25 @@
+[Unit]
+Description=Server administration Discord bot
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=serveradminbot
+Group=serveradminbot
+WorkingDirectory=/opt/serveradminbot
+ExecStart=/usr/bin/dotnet /opt/serveradminbot/ServerAdminBot.dll /etc/serveradminbot/config.json
+EnvironmentFile=-/etc/serveradminbot/environment
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

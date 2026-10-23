@@ -1,0 +1,19 @@
+{
+  "token": "",
+  "guild_id": 0,
+  "database": {
+    "host": "127.0.0.1",
+    "port": 5432,
+    "database": "server_admin",
+    "username": "server_admin_bot",
+    "password": "",
+    "maximum_pool_size": 10
+  },
+  "servers": {
+    "Classic": {
+      "ip": "127.0.0.1",
+      "port": 7777,
+      "api_key": ""
+    }
+  }
+}

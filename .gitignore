@@ -1,0 +1,10 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+.idea/
+artifacts/
+**/config.json
+**/Config.yml
+.test-postgres/
