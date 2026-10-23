@@ -8,3 +8,4 @@ artifacts/
 **/config.json
 **/Config.yml
 .test-postgres/
+**/recent-players.json*

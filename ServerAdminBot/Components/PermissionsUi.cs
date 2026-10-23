@@ -7,8 +7,20 @@ namespace ServerAdminBot.Components;
 
 public static class PermissionsUi
 {
-    private static readonly string[] Commands = ["ping", "pingserver", "ban", "oban", "players", "players.manage"];
-    private static string Title(string command) => command == "players.manage" ? "/players · Управление" : "/" + command;
+    private static readonly string[] Commands =
+    [
+        "ping",
+        "pingserver",
+        "ban",
+        "oban",
+        "players",
+        "recentlyplayers",
+        "players.manage",
+    ];
+
+    private static string Title(string command) =>
+        command == "players.manage" ? "/players · Управление" : "/" + command;
+
     private static readonly ConcurrentDictionary<string, Session> Sessions = new();
 
     private sealed class Session
@@ -27,19 +39,27 @@ public static class PermissionsUi
     {
         if (!Ui.IsAdmin(member))
             throw new UserError("Требуется право Discord Administrator.");
+
         foreach (var item in Sessions.Where(x => x.Value.Expires <= DateTime.UtcNow))
             Sessions.TryRemove(item.Key, out _);
+
         if (Sessions.Count >= 100)
             throw new UserError("Открыто слишком много панелей прав. Повторите позже.");
+
         var key = Guid.NewGuid().ToString("N");
         var session = new Session
         {
             Owner = member.Id,
             Guild = member.Guild.Id,
-            Roles = member.Guild.Roles.Values.OrderBy(x => x.Id != member.Guild.Id)
-                .ThenByDescending(x => x.Position).ThenBy(x => x.Id).Select(x => x.Id).ToArray(),
+            Roles = member
+                .Guild.Roles.Values.OrderBy(x => x.Id != member.Guild.Id)
+                .ThenByDescending(x => x.Position)
+                .ThenBy(x => x.Id)
+                .Select(x => x.Id)
+                .ToArray(),
         };
         Sessions[key] = session;
+
         try
         {
             var payload = await BuildAsync(key, session, member.Guild);
@@ -49,6 +69,7 @@ public static class PermissionsUi
         catch
         {
             Sessions.TryRemove(key, out _);
+
             throw;
         }
     }
@@ -63,20 +84,56 @@ public static class PermissionsUi
         var components = new List<object>
         {
             Panel.Text("### Настройка прав · " + Title(session.Command)),
-            Panel.Text("**Общий доступ:** " + (settings.Everyone ? "Включён · @everyone" : "Выключен") +
-                "\n**Роли с доступом:** " + (roleText.Length == 0 ? "Нет" : roleText)),
-            Panel.Row(Panel.Select(prefix + "command", "Выберите команду или блок", Commands.Select(x => (Title(x), x, x == session.Command)))),
+            Panel.Text(
+                "**Общий доступ:** " + (settings.Everyone ? "Включён · @everyone" : "Выключен")
+                    + "\n**Роли с доступом:** " + (roleText.Length == 0 ? "Нет" : roleText)
+            ),
+            Panel.Row(
+                Panel.Select(
+                    prefix + "command",
+                    "Выберите команду или блок",
+                    Commands.Select(x => (Title(x), x, x == session.Command))
+                )
+            ),
         };
+
         if (page.Length > 0)
-            components.Add(Panel.Row(Panel.Select(prefix + "roles", "Роли с доступом", page.Select(id => (
-                id == guild.Id ? "@everyone · Общий доступ" : guild.Roles.TryGetValue(id, out var role)
-                    ? Ui.Truncate(role.Name, 100) : "Удалённая роль " + id,
-                id.ToString(), id == guild.Id ? settings.Everyone : settings.Roles.Contains(id))), true)));
-        components.Add(Panel.Row(
-            Panel.Button(prefix + "previous", "◀ Роли", disabled: session.Page == 0),
-            Panel.Button(prefix + "next", "Роли ▶", disabled: (session.Page + 1) * 25 >= session.Roles.Length),
-            Panel.Button(prefix + "everyone", "Общий доступ: " + (settings.Everyone ? "✓" : "✗"), settings.Everyone ? 3 : 2)));
-        components.Add(Panel.Text($"-# Роли: страница {session.Page + 1}/{Math.Max(1, (session.Roles.Length + 24) / 25)} · панель действует 15 минут"));
+            components.Add(
+                Panel.Row(
+                    Panel.Select(
+                        prefix + "roles",
+                        "Роли с доступом",
+                        page.Select(id =>
+                            (
+                                id == guild.Id ? "@everyone · Общий доступ"
+                                : guild.Roles.TryGetValue(id, out var role) ? Ui.Truncate(role.Name, 100)
+                                : "Удалённая роль " + id,
+                                id.ToString(),
+                                id == guild.Id ? settings.Everyone : settings.Roles.Contains(id)
+                            )
+                        ),
+                        true
+                    )
+                )
+            );
+
+        components.Add(
+            Panel.Row(
+                Panel.Button(prefix + "previous", "◀ Роли", disabled: session.Page == 0),
+                Panel.Button(prefix + "next", "Роли ▶", disabled: (session.Page + 1) * 25 >= session.Roles.Length),
+                Panel.Button(
+                    prefix + "everyone",
+                    "Общий доступ: " + (settings.Everyone ? "✓" : "✗"),
+                    settings.Everyone ? 3 : 2
+                )
+            )
+        );
+        components.Add(
+            Panel.Text(
+                $"-# Роли: страница {session.Page + 1}/{Math.Max(1, (session.Roles.Length + 24) / 25)} · панель действует 15 минут"
+            )
+        );
+
         return Panel.Build(components);
     }
 
@@ -84,30 +141,45 @@ public static class PermissionsUi
     {
         if (!e.Id.StartsWith("perm:", StringComparison.Ordinal))
             return;
+
         var parts = e.Id.Split(':');
+
         if (parts.Length != 4 || !Sessions.TryGetValue(parts[1], out var session) || session.Expires <= DateTime.UtcNow)
         {
             await RejectAsync(e, "Панель истекла. Вызовите /permissionscontrol заново.");
+
             return;
         }
+
         if (e.User.Id != session.Owner || e.Guild?.Id != session.Guild)
         {
             await RejectAsync(e, "Это панель другого пользователя.");
+
             return;
         }
+
         await Panel.DeferAsync(e.Interaction, update: true);
         await session.Gate.WaitAsync(Program.StopToken);
+
         try
         {
             if (!int.TryParse(parts[2], out var revision) || revision != session.Revision)
             {
-                await e.Interaction.CreateFollowupMessageAsync(new DiscordFollowupMessageBuilder()
-                    .WithContent("Панель обновилась. Используйте её текущие элементы управления.").AsEphemeral().AddMentions(Mentions.None));
+                await e.Interaction.CreateFollowupMessageAsync(
+                    new DiscordFollowupMessageBuilder()
+                        .WithContent("Панель обновилась. Используйте её текущие элементы управления.")
+                        .AsEphemeral()
+                        .AddMentions(Mentions.None)
+                );
+
                 return;
             }
+
             var member = await e.Guild.GetMemberAsync(e.User.Id, updateCache: true);
+
             if (!Ui.IsAdmin(member))
                 throw new UserError("Требуется право Discord Administrator.");
+
             switch (parts[3])
             {
                 case "command":
@@ -123,11 +195,17 @@ public static class PermissionsUi
                     {
                         if (!ulong.TryParse(value, out var id) || !page.Contains(id) || !e.Guild.Roles.ContainsKey(id))
                             throw new UserError("Список ролей изменился. Откройте панель заново.");
+
                         selected.Add(id);
                     }
-                    await Program.Permissions.UpdateRolesAsync(session.Guild, session.Command,
-                        page.Where(x => x != session.Guild), selected.Where(x => x != session.Guild),
-                        page.Contains(session.Guild) ? selected.Contains(session.Guild) : null, Program.StopToken);
+                    await Program.Permissions.UpdateRolesAsync(
+                        session.Guild,
+                        session.Command,
+                        page.Where(x => x != session.Guild),
+                        selected.Where(x => x != session.Guild),
+                        page.Contains(session.Guild) ? selected.Contains(session.Guild) : null,
+                        Program.StopToken
+                    );
                     break;
                 case "everyone":
                     await Program.Permissions.ToggleEveryoneAsync(session.Guild, session.Command, Program.StopToken);
@@ -141,8 +219,12 @@ public static class PermissionsUi
                 default:
                     throw new UserError("Неизвестное действие.");
             }
+
             var payload = await BuildAsync(parts[1], session, e.Guild);
-            if (parts[3] is "roles" or "everyone") CommandLog.Write("permissionscontrol", e.User.Id, payload);
+
+            if (parts[3] is "roles" or "everyone")
+                CommandLog.Write("permissionscontrol", e.User.Id, payload);
+
             await Panel.SendAsync(e.Interaction, payload, Program.StopToken);
         }
         catch (OperationCanceledException) when (Program.StopToken.IsCancellationRequested) { }
@@ -150,8 +232,17 @@ public static class PermissionsUi
         {
             Console.Error.WriteLine("Permissions: " + exception.GetType().Name);
             Sessions.TryRemove(parts[1], out _);
-            var payload = Panel.Build([Panel.Text(exception is UserError
-                ? exception.Message : "Не удалось обновить права. Откройте панель заново.")], 0xED4245);
+
+            var payload = Panel.Build(
+                [
+                    Panel.Text(
+                        exception is UserError
+                            ? exception.Message
+                            : "Не удалось обновить права. Откройте панель заново."
+                    ),
+                ],
+                0xED4245
+            );
             CommandLog.Write("permissionscontrol", e.User.Id, payload);
             await Panel.SendAsync(e.Interaction, payload, Program.StopToken);
         }
@@ -161,5 +252,6 @@ public static class PermissionsUi
         }
     }
 
-    private static Task RejectAsync(ComponentInteractionCreateEventArgs e, string text) => Panel.RejectAsync(e.Interaction, text);
+    private static Task RejectAsync(ComponentInteractionCreateEventArgs e, string text) =>
+        Panel.RejectAsync(e.Interaction, text);
 }

@@ -5,6 +5,7 @@
     "ping": 0,
     "pingserver": 0,
     "players": 0,
+    "recentlyplayers": 0,
     "ban": 0,
     "oban": 0,
     "kick": 0,

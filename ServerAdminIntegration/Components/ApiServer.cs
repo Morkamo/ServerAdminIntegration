@@ -1,16 +1,16 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text;
-using Utf8Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ServerAdminIntegration.Configs;
 using ServerAdminIntegration.Handlers;
 using ServerAdminIntegration.Shared;
+using Utf8Json;
 
 namespace ServerAdminIntegration.Components;
 
@@ -30,7 +30,9 @@ public sealed class ApiServer
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         _config.Validate();
+
         var host = _config.Ip.Contains(":") ? "[" + _config.Ip + "]" : _config.Ip;
+
         using (var listener = new HttpListener())
         using (var slots = new SemaphoreSlim(_config.MaximumConcurrentRequests))
         {
@@ -38,7 +40,9 @@ public sealed class ApiServer
             cancellationToken.ThrowIfCancellationRequested();
             listener.Start();
             _log($"API listening on {_config.Ip}:{_config.Port}.");
+
             var pending = new HashSet<Task>();
+
             using (cancellationToken.Register(listener.Close))
             {
                 try
@@ -47,17 +51,25 @@ public sealed class ApiServer
                     {
                         var context = await listener.GetContextAsync().ConfigureAwait(false);
                         pending.RemoveWhere(task => task.IsCompleted);
+
                         if (!await slots.WaitAsync(0, cancellationToken).ConfigureAwait(false))
                         {
                             context.Response.StatusCode = 503;
                             context.Response.Close();
                             continue;
                         }
+
                         pending.Add(ProcessAsync(context, slots, cancellationToken));
                     }
                 }
-                catch (Exception exception) when (cancellationToken.IsCancellationRequested &&
-                    (exception is HttpListenerException || exception is ObjectDisposedException || exception is OperationCanceledException)) { }
+                catch (Exception exception)
+                    when (cancellationToken.IsCancellationRequested
+                        && (
+                            exception is HttpListenerException
+                            || exception is ObjectDisposedException
+                            || exception is OperationCanceledException
+                        )
+                    ) { }
                 finally
                 {
                     listener.Close();
@@ -72,6 +84,7 @@ public sealed class ApiServer
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop))
         {
             timeout.CancelAfter(TimeSpan.FromSeconds(ApiProtocol.TimeoutSeconds));
+
             using (timeout.Token.Register(context.Response.Abort))
             {
                 try
@@ -80,6 +93,7 @@ public sealed class ApiServer
                     var url = request.Url;
                     var status = 200;
                     string text;
+
                     if (!MatchesKey(request.Headers[ApiProtocol.KeyHeader]))
                     {
                         status = 401;
@@ -91,13 +105,22 @@ public sealed class ApiServer
                         context.Response.Headers["Allow"] = "POST";
                         text = "Method not allowed.";
                     }
-                    else if (url == null || url.Query.Length != 0 || !url.AbsolutePath.StartsWith(ApiProtocol.CommandPath, StringComparison.Ordinal) ||
-                        Array.IndexOf(new[] { "ping", "players", "ban", "oban", "kick" }, url.AbsolutePath.Substring(ApiProtocol.CommandPath.Length)) < 0)
+                    else if (url == null
+                        || url.Query.Length != 0
+                        || !url.AbsolutePath.StartsWith(ApiProtocol.CommandPath, StringComparison.Ordinal)
+                        || Array.IndexOf(
+                            new[] { "ping", "players", "recentlyplayers", "recentban", "ban", "oban", "kick" },
+                            url.AbsolutePath.Substring(ApiProtocol.CommandPath.Length)
+                        ) < 0)
                     {
                         status = 404;
                         text = "Unknown command.";
                     }
-                    else if ((url.AbsolutePath.EndsWith("/ping", StringComparison.Ordinal) || url.AbsolutePath.EndsWith("/players", StringComparison.Ordinal)) && request.HasEntityBody)
+                    else if ((
+                            url.AbsolutePath.EndsWith("/ping", StringComparison.Ordinal)
+                            || url.AbsolutePath.EndsWith("/players", StringComparison.Ordinal)
+                            || url.AbsolutePath.EndsWith("/recentlyplayers", StringComparison.Ordinal)
+                        ) && request.HasEntityBody)
                     {
                         status = 400;
                         text = "This command does not accept a request body.";
@@ -106,35 +129,57 @@ public sealed class ApiServer
                     {
                         var command = url.AbsolutePath.Substring(ApiProtocol.CommandPath.Length);
                         var parameters = new ApiRequest();
-                        if (command != "ping" && command != "players")
+
+                        if (command != "ping" && command != "players" && command != "recentlyplayers")
                         {
                             if (!request.HasEntityBody || request.ContentLength64 > ApiProtocol.MaximumRequestBytes)
                             {
-                                await ReplyAsync(context.Response, 400, "Invalid request body.", timeout.Token).ConfigureAwait(false);
+                                await ReplyAsync(context.Response, 400, "Invalid request body.", timeout.Token)
+                                    .ConfigureAwait(false);
+
                                 return;
                             }
+
                             using (var data = new MemoryStream())
                             {
                                 var buffer = new byte[1024];
                                 int read;
-                                while ((read = await request.InputStream.ReadAsync(buffer, 0, buffer.Length, timeout.Token).ConfigureAwait(false)) != 0)
+
+                                while ((
+                                        read = await request
+                                            .InputStream.ReadAsync(buffer, 0, buffer.Length, timeout.Token)
+                                            .ConfigureAwait(false)
+                                    ) != 0)
                                 {
                                     if (data.Length + read > ApiProtocol.MaximumRequestBytes)
                                     {
-                                        await ReplyAsync(context.Response, 413, "Request too large.", timeout.Token).ConfigureAwait(false);
+                                        await ReplyAsync(context.Response, 413, "Request too large.", timeout.Token)
+                                            .ConfigureAwait(false);
+
                                         return;
                                     }
+
                                     data.Write(buffer, 0, read);
                                 }
-                                try { parameters = ApiJson.ReadRequest(data.ToArray()); }
+
+                                try
+                                {
+                                    parameters = ApiJson.ReadRequest(data.ToArray());
+                                }
                                 catch (JsonParsingException)
                                 {
-                                    await ReplyAsync(context.Response, 400, "Invalid JSON.", timeout.Token).ConfigureAwait(false);
+                                    await ReplyAsync(context.Response, 400, "Invalid JSON.", timeout.Token)
+                                        .ConfigureAwait(false);
+
                                     return;
                                 }
                             }
                         }
-                        var result = await _commands.ExecuteAsync(command, parameters, timeout.Token).ConfigureAwait(false);
+
+                        var result = await _commands
+                            .ExecuteAsync(command, parameters, timeout.Token)
+                            .ConfigureAwait(false);
+
                         if (command == "ping")
                             text = result.Message;
                         else
@@ -143,6 +188,7 @@ public sealed class ApiServer
                             context.Response.ContentType = "application/json; charset=utf-8";
                         }
                     }
+
                     await ReplyAsync(context.Response, status, text, timeout.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (timeout.IsCancellationRequested) { }
@@ -151,9 +197,11 @@ public sealed class ApiServer
                     if (!timeout.IsCancellationRequested)
                     {
                         _log("API request failed: " + exception);
+
                         try
                         {
-                            await ReplyAsync(context.Response, 500, "Command failed.", timeout.Token).ConfigureAwait(false);
+                            await ReplyAsync(context.Response, 500, "Command failed.", timeout.Token)
+                                .ConfigureAwait(false);
                         }
                         catch (Exception) { }
                     }
@@ -171,18 +219,28 @@ public sealed class ApiServer
     {
         if (candidate == null || candidate.Length != _config.ApiKey.Length)
             return false;
+
         var difference = 0;
+
         for (var index = 0; index < candidate.Length; index++)
             difference |= candidate[index] ^ _config.ApiKey[index];
+
         return difference == 0;
     }
 
-    private static async Task ReplyAsync(HttpListenerResponse response, int status, string text, CancellationToken token)
+    private static async Task ReplyAsync(
+        HttpListenerResponse response,
+        int status,
+        string text,
+        CancellationToken token
+    )
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         response.StatusCode = status;
+
         if (string.IsNullOrEmpty(response.ContentType))
             response.ContentType = "text/plain; charset=utf-8";
+
         response.ContentLength64 = bytes.Length;
         await response.OutputStream.WriteAsync(bytes, 0, bytes.Length, token).ConfigureAwait(false);
         response.Close();

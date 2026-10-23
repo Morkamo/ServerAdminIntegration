@@ -12,9 +12,13 @@ SELECT length(:'server_admin_password') >= 16 AS password_valid \gset
     \quit 1
 \endif
 
-CREATE ROLE server_admin_bot LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD :'server_admin_password';
+CREATE ROLE server_admin_bot
+    LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+    PASSWORD :'server_admin_password';
+
 CREATE DATABASE server_admin OWNER server_admin_bot;
 REVOKE ALL ON DATABASE server_admin FROM PUBLIC;
 GRANT CONNECT, TEMPORARY ON DATABASE server_admin TO server_admin_bot;
+
 \connect server_admin
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;

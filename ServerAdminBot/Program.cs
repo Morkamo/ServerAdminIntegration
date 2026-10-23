@@ -18,54 +18,88 @@ public static class Program
     {
         using var stop = new CancellationTokenSource();
         StopToken = stop.Token;
-        ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; stop.Cancel(); };
+
+        ConsoleCancelEventHandler cancel = (_, e) =>
+        {
+            e.Cancel = true;
+            stop.Cancel();
+        };
         Console.CancelKeyPress += cancel;
-        using var terminate = OperatingSystem.IsWindows() ? null : PosixSignalRegistration.Create(
-            PosixSignal.SIGTERM, context => { context.Cancel = true; stop.Cancel(); });
+
+        using var terminate = OperatingSystem.IsWindows()
+            ? null
+            : PosixSignalRegistration.Create(
+                PosixSignal.SIGTERM,
+                context =>
+                {
+                    context.Cancel = true;
+                    stop.Cancel();
+                }
+            );
+
         try
         {
             var initializeOnly = args.Contains("--init-db");
             var paths = args.Where(x => x != "--init-db").ToArray();
+
             if (paths.Length > 1)
                 throw new InvalidOperationException("Использование: ServerAdminBot [config.json] [--init-db]");
-            var path = Path.GetFullPath(paths.FirstOrDefault() ?? Path.Combine(AppContext.BaseDirectory, "config.json"));
+
+            var path = Path.GetFullPath(
+                paths.FirstOrDefault() ?? Path.Combine(AppContext.BaseDirectory, "config.json")
+            );
             Config = await Config.LoadAsync(path, !initializeOnly, stop.Token);
+
             await using var source = Config.Database.CreateDataSource();
             Permissions = new CommandPermissions(source);
             await Permissions.InitializeAsync(stop.Token);
+
             if (initializeOnly)
             {
                 Console.WriteLine("Таблицы ServerAdminBot готовы.");
+
                 return 0;
             }
+
             using var api = new ServerApi();
             ServerApi = api;
-            using var client = new DiscordClient(new DiscordConfiguration
-            {
-                Token = Config.Token,
-                TokenType = TokenType.Bot,
-                Intents = DiscordIntents.Guilds,
-                MinimumLogLevel = Microsoft.Extensions.Logging.LogLevel.Information,
-                HttpTimeout = TimeSpan.FromSeconds(15),
-            });
+
+            using var client = new DiscordClient(
+                new DiscordConfiguration
+                {
+                    Token = Config.Token,
+                    TokenType = TokenType.Bot,
+                    Intents = DiscordIntents.Guilds,
+                    MinimumLogLevel = Microsoft.Extensions.Logging.LogLevel.Information,
+                    HttpTimeout = TimeSpan.FromSeconds(15),
+                }
+            );
             var slash = client.UseSlashCommands();
             slash.RegisterCommands<PingCommands>(Config.GuildId);
             slash.RegisterCommands<PermissionsControlCommand>(Config.GuildId);
             slash.RegisterCommands<ModerationCommands>(Config.GuildId);
             slash.RegisterCommands<PlayersCommand>(Config.GuildId);
-            client.ComponentInteractionCreated += (sender, e) => DispatchAsync(() => PermissionsUi.HandleAsync(sender, e));
+            client.ComponentInteractionCreated += (sender, e) =>
+                DispatchAsync(() => PermissionsUi.HandleAsync(sender, e));
             client.ComponentInteractionCreated += (sender, e) => DispatchAsync(() => PlayersUi.HandleAsync(sender, e));
             client.ModalSubmitted += (sender, e) => DispatchAsync(() => PlayersUi.ModalAsync(sender, e));
             slash.SlashCommandErrored += async (_, e) =>
             {
-                Console.Error.WriteLine($"/{e.Context.CommandName}: slash handler failed ({e.Exception.GetType().Name}).");
+                Console.Error.WriteLine(
+                    $"/{e.Context.CommandName}: slash handler failed ({e.Exception.GetType().Name})."
+                );
+
                 try
                 {
                     await Panel.RejectAsync(e.Context.Interaction, "Не удалось обработать команду. Попробуйте позже.");
                 }
-                catch (Exception exception) { Console.Error.WriteLine("Discord response failed: " + exception.GetType().Name); }
+                catch (Exception exception)
+                {
+                    Console.Error.WriteLine("Discord response failed: " + exception.GetType().Name);
+                }
             };
             await client.ConnectAsync();
+
             try
             {
                 Console.WriteLine($"ServerAdminBot {typeof(Program).Assembly.GetName().Version} запущен.");
@@ -76,12 +110,17 @@ public static class Program
             {
                 await client.DisconnectAsync();
             }
+
             return 0;
         }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested) { return 0; }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            return 0;
+        }
         catch (Exception exception)
         {
             Console.Error.WriteLine($"ServerAdminBot: {exception.GetType().Name}: {exception.Message}");
+
             return 1;
         }
         finally
@@ -94,10 +133,17 @@ public static class Program
     {
         _ = Task.Run(async () =>
         {
-            try { await handler(); }
+            try
+            {
+                await handler();
+            }
             catch (OperationCanceledException) when (StopToken.IsCancellationRequested) { }
-            catch (Exception exception) { Console.Error.WriteLine("Discord interaction failed: " + exception.GetType().Name); }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine("Discord interaction failed: " + exception.GetType().Name);
+            }
         });
+
         return Task.CompletedTask;
     }
 }

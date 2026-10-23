@@ -9,10 +9,14 @@
     <GameManagedDirectory Condition="'$(GameManagedDirectory)' == '' and '$(OS)' == 'Windows_NT'">C:\SteamLibrary\steamapps\common\SCP Secret Laboratory Dedicated Server\SCPSL_Data\Managed</GameManagedDirectory>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Assembly-CSharp"><HintPath>$(GameManagedDirectory)/Assembly-CSharp.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GameManagedDirectory)/Assembly-CSharp.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <ProjectReference Include="../ServerAdminBot/ServerAdminBot.csproj" />
     <Compile Include="../ServerAdminIntegration/Components/ApiServer.cs" Link="Plugin/ApiServer.cs" />
     <Compile Include="../ServerAdminIntegration/Components/ApiJson.cs" Link="Plugin/ApiJson.cs" />
+    <Compile Include="../ServerAdminIntegration/Components/RecentPlayersStore.cs" Link="Plugin/RecentPlayersStore.cs" />
     <Compile Include="../ServerAdminIntegration/Handlers/CommandHandler.cs" Link="Plugin/CommandHandler.cs" />
     <Compile Include="../ServerAdminIntegration/Configs/ApiConfig.cs" Link="Plugin/ApiConfig.cs" />
     <Compile Include="../ServerAdminIntegration/Components/GameThread.cs" Link="Plugin/GameThread.cs" />
